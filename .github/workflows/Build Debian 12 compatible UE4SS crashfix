@@ -1,4 +1,4 @@
-name: Build Debian 12 compatible UE4SS
+name: Build Debian 12 compatible UE4SS crashfix
 on:
   workflow_dispatch:
 permissions:
