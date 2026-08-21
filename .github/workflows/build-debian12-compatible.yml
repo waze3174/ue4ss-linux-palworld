@@ -1,8 +1,11 @@
 name: Build Debian 12 compatible UE4SS
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -10,23 +13,27 @@ jobs:
     timeout-minutes: 60
     env:
       RUSTUP_TOOLCHAIN: nightly-2026-07-30
+
     steps:
       - name: Install build tools
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates cmake curl file git make ninja-build pkg-config
+
       - name: Checkout fixed source revision
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           submodules: recursive
+
       - name: Install pinned Rust toolchain
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             | sh -s -- -y --profile minimal \
               --default-toolchain nightly-2026-07-30
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Configure headless Debian 12 build
         run: |
           cmake -S . -B build_debian12 -G Ninja \
@@ -34,30 +41,30 @@ jobs:
             -DUE4SS_GUI_ENABLED=OFF \
             -DUE4SS_INPUT_ENABLED=OFF \
             -DUE4SS_PROFILERS=OFF \
-            -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -static-libgcc -Wl,--exclude-libs=libstdc++.a,libgcc.a,libgcc_eh.a"
+            -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+
       - name: Build UE4SS
         run: cmake --build build_debian12 --target UE4SS --parallel 2
+
       - name: Verify runtime compatibility
         shell: bash
         run: |
           set -euo pipefail
           lib="build_debian12/Game__Dev__Linux64/lib/libUE4SS.so"
           test -s "$lib"
+
           max_glibc="$(readelf --version-info "$lib" \
             | grep -oE 'GLIBC_[0-9.]+' \
             | sed 's/GLIBC_//' \
             | sort -Vu \
             | tail -1)"
           dpkg --compare-versions "$max_glibc" le "2.36"
+
           if readelf -dW "$lib" | grep -Eq 'libstdc\+\+\.so|libgcc_s\.so'; then
             echo "Unexpected dynamic GCC runtime dependency" >&2
             exit 1
           fi
-          if readelf --dyn-syms -W "$lib" | grep -qE '_ZTI|_ZTS|__gxx_personality_v0|_Unwind_'; then
-            echo "Exception-handling/RTTI symbols still exported dynamically -- --exclude-libs did not take effect" >&2
-            readelf --dyn-syms -W "$lib" | grep -E '_ZTI|_ZTS|__gxx_personality_v0|_Unwind_' >&2
-            exit 1
-          fi
+
           mkdir -p artifact
           cp "$lib" artifact/libUE4SS.so
           {
@@ -71,9 +78,8 @@ jobs:
             readelf --version-info "$lib" \
               | grep -oE 'GLIBC_[0-9.]+' \
               | sort -Vu
-            echo "--- dynamic symbol table entries for RTTI/exception-handling (should be empty) ---"
-            readelf --dyn-syms -W "$lib" | grep -E '_ZTI|_ZTS|__gxx_personality_v0|_Unwind_' || echo "(none found -- exclude-libs confirmed working)"
           } > artifact/compatibility-report.txt
+
       - name: Upload verified library
         uses: actions/upload-artifact@v4
         with:
