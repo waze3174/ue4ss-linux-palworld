@@ -40,11 +40,8 @@ The shipping build is stripped, so I can't name the exact function beyond frame 
 **Server details:**
 - Platform: Linux dedicated server (`PalServer-Linux-Shipping`), x86_64
 - Launch flags: `-publiclobby -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS -port=8211 -publicport=8211 -players=32 -rcon`
-- [Fill in: Palworld/game version number, and Steam branch if not default]
 
-**What I can provide if useful:**
-- The full core dump (~10GB) — happy to arrange a transfer if your team wants to inspect it directly with debug symbols on your end.
-- Timestamps of confirmed occurrences, and I'm continuing to log any further crashes automatically.
+
 
 Is this a known issue on your end? Appreciate any guidance, and happy to provide anything else that would help track it down.
 
