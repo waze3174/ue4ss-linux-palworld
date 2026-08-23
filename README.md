@@ -8,8 +8,45 @@ Palworld server** — no Windows, no Proton, no Wine. Loaded with `LD_PRELOAD`.
 > (MIT License), with Palworld fork by
 > [Yangff](https://github.com/Yangff) and Linux native port by
 > [BlackBookOfficial](https://github.com/BlackBookOfficial/ue4ss-linux-palworld).
+> This fork descends from
+> [kchu42754-cmyk/ue4ss-linux-palworld](https://github.com/kchu42754-cmyk/ue4ss-linux-palworld),
+> which forks `BlackBookOfficial` directly — see "Differences from upstream"
+> below for what's changed at each step.
 
-## Status
+## Differences from upstream
+
+This fork's lineage is `BlackBookOfficial` → `kchu42754-cmyk` → this repo,
+not three independent forks. The resilience features described above
+(AOB-scan function resolution, the self-healing vtable sweep, and the hook
+validation gate) were introduced upstream in `kchu42754-cmyk` and are
+inherited here unchanged, not something this fork added.
+
+What this fork changes on top of that inherited base:
+
+- **A Debian 12 / glibc-2.36-targeted production build**, built inside a
+  `gcc:14-bookworm` container via CI (`Build Debian 12 compatible UE4SS
+  crashfix.yml`), for hosts whose system libstdc++ doesn't cover what a
+  newer GCC's runtime needs.
+- **A cross-runtime C++ exception-handling fix** for that build path: the
+  statically-linked runtime (`-static-libstdc++ -static-libgcc`, required
+  because GCC 14's bundled libstdc++ needs `GLIBCXX_3.4.33`, higher than
+  the Debian 12 target's `3.4.30`) was leaking its exception-handling
+  symbols into the shared library's dynamic symbol table, letting them
+  interpose with the host's own `libgcc_s.so.1` and crash mid-unwind when a
+  Lua mod callback errored. Fixed with
+  `-Xlinker --exclude-libs=libstdc++.a,libgcc.a,libgcc_eh.a`; the build's
+  verification step now fails loudly if any `_ZTI`/`_ZTS`/
+  `__gxx_personality_v0`/`_Unwind_` symbols are still dynamically exported,
+  rather than silently shipping a build that could still hit this.
+
+Note: this repo also has a separate, tag-triggered release pipeline
+(`linux-release.yml`) that builds inside a plain `debian:12` container using
+its stock GCC 12 toolchain instead of `gcc:14-bookworm` — since that path
+never statically links a newer runtime into the library, it was never
+exposed to this specific crash in the first place. The two pipelines exist
+for different reasons and aren't required to produce identical binaries.
+
+
 
 Palworld (UE 5.1) dedicated server: **all major UE4SS hooks verified working
 in-game** — BeginPlay, EndPlay, LoadMap, InitGameState, ProcessConsoleExec,
@@ -88,8 +125,13 @@ disabled and `UE4SS.log` names it (`Palworld hook validation REFUSED ...`).
   - GUI runs headless (EGL, hidden window) — no visible window on a server.
   - Console-command mods rely on the `ProcessConsoleExec` hook (works, fires
     on RCON/chat commands).
-  - One mod crashing does not kill the server — per-mod crash recovery logs
-    and continues.
+  - One mod crashing does not kill the server in most cases — per-mod crash
+    recovery logs and continues. One known exception: a Lua callback that
+    triggers a C++ exception inside the native hook dispatcher can crash the
+    whole process rather than being caught, if the loaded `libUE4SS.so` has
+    its own statically-linked C++ runtime whose exception-handling symbols
+    aren't hidden from the dynamic symbol table (see the Debian 12 build
+    note below for the fix used in this fork).
 
 ---
 
